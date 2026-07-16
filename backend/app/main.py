@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
-from app.api.health import router as health_router
+from app.api.router import api_router
+from app.api.routes.health import root_router
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
 
@@ -15,15 +16,5 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-
-@app.get("/")
-def root() -> dict[str, dict[str, str]]:
-    return {
-        "data": {
-            "name": "VNStockLab API",
-            "status": "running",
-        }
-    }
-
-
-app.include_router(health_router, prefix=settings.api_v1_prefix)
+app.include_router(root_router)
+app.include_router(api_router, prefix=settings.api_v1_prefix)

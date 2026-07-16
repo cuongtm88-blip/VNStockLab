@@ -40,6 +40,16 @@ uv run ruff format --check .
 uv run mypy app tests
 ```
 
+## Application structure
+
+- `app/api/router.py` is the central API router registry.
+- `app/api/routes` contains HTTP route modules.
+- `app/core` contains configuration and logging.
+- `app/common` contains stable shared constants.
+- `app/schemas` contains API request and response schemas.
+
+Business modules will be introduced only in later roadmap tasks.
+
 ## Pre-commit hooks
 
 Pre-commit runs lightweight quality checks before commits. Install the hooks from the
