@@ -13,6 +13,9 @@ Install and synchronize dependencies with:
 uv sync
 ```
 
+For local development, copy `.env.example` to `.env` and adjust its non-secret settings.
+Keep `.env` local and do not commit it.
+
 ## Development
 
 Start the development server with:
@@ -27,4 +30,12 @@ Run the test suite with:
 
 ```shell
 uv run pytest
+```
+
+Run linting, formatting checks, and static type checking with:
+
+```shell
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy app tests
 ```
