@@ -64,3 +64,73 @@ uv run pre-commit run --all-files
 
 Pre-commit does not run the test suite. Continue to run pytest explicitly with
 `uv run pytest` from the `backend` directory.
+
+## Docker development
+
+Run the following commands from the repository root.
+
+Copy the development environment template:
+
+```shell
+cp .env.example .env
+```
+
+Validate the Compose configuration:
+
+```shell
+docker compose config
+```
+
+Build the backend image:
+
+```shell
+docker compose build backend
+```
+
+Start all services:
+
+```shell
+docker compose up -d
+```
+
+View service status:
+
+```shell
+docker compose ps
+```
+
+Follow backend logs:
+
+```shell
+docker compose logs -f backend
+```
+
+Run tests inside the backend container:
+
+```shell
+docker compose exec backend uv run pytest
+```
+
+Stop services without deleting data:
+
+```shell
+docker compose down
+```
+
+Stop services and delete local database and Redis volumes:
+
+```shell
+docker compose down -v
+```
+
+**Warning:** `docker compose down -v` permanently deletes the local PostgreSQL
+and Redis data stored in the named volumes.
+
+Local endpoints:
+
+- <http://127.0.0.1:8000/>
+- <http://127.0.0.1:8000/api/v1/health>
+- <http://127.0.0.1:8000/docs>
+
+PostgreSQL and Redis are provisioned for local development, but application
+integration will be implemented in later frozen roadmap tasks.

@@ -1,0 +1,82 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vnstocklab_backend
+    restart: unless-stopped
+    command: uv run fastapi dev app/main.py --host 0.0.0.0 --port 8000
+    environment:
+      VNSTOCKLAB_ENVIRONMENT: ${VNSTOCKLAB_ENVIRONMENT:-development}
+      VNSTOCKLAB_DEBUG: ${VNSTOCKLAB_DEBUG:-true}
+      VNSTOCKLAB_LOG_LEVEL: ${VNSTOCKLAB_LOG_LEVEL:-INFO}
+      VNSTOCKLAB_ALLOWED_HOSTS: '${VNSTOCKLAB_ALLOWED_HOSTS:-["localhost","127.0.0.1","backend"]}'
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    expose:
+      - "8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/api/v1/health", timeout=4)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - vnstocklab_network
+
+  postgres:
+    image: postgres:17
+    container_name: vnstocklab_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vnstocklab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
+      POSTGRES_DB: ${POSTGRES_DB:-vnstocklab}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - vnstocklab_network
+
+  redis:
+    image: redis:8-alpine
+    container_name: vnstocklab_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vnstocklab_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  vnstocklab_network:
