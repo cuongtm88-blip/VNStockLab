@@ -39,3 +39,28 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy app tests
 ```
+
+## Pre-commit hooks
+
+Pre-commit runs lightweight quality checks before commits. Install the hooks from the
+`backend` directory with:
+
+```shell
+uv run pre-commit install
+```
+
+From the repository root, the preferred command for manually running all hooks is:
+
+```shell
+uv --project backend run pre-commit run --all-files
+```
+
+When invoking the backend project directly, run the uv command from the `backend`
+directory:
+
+```shell
+uv run pre-commit run --all-files
+```
+
+Pre-commit does not run the test suite. Continue to run pytest explicitly with
+`uv run pytest` from the `backend` directory.
