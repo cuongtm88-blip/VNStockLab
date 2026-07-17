@@ -1,6 +1,8 @@
 # VNStockLab Backend
 
-This directory provides the minimal FastAPI foundation for the VNStockLab API. It includes the application entry point, health endpoints, and endpoint tests without database, authentication, or business-domain components.
+This directory provides the FastAPI foundation for the VNStockLab API. It includes the
+application entry point, health endpoints, asynchronous PostgreSQL connectivity, and endpoint
+tests without authentication or business-domain components.
 
 ## Requirements
 
@@ -40,11 +42,40 @@ uv run ruff format --check .
 uv run mypy app tests
 ```
 
+## Database and migrations
+
+Verify the local database connection from this directory with:
+
+```shell
+uv run python -m app.db.check
+```
+
+Run Alembic commands from this directory:
+
+```shell
+uv run alembic current
+uv run alembic history
+uv run alembic upgrade head
+uv run alembic downgrade -1
+```
+
+In a future task, create a migration with:
+
+```shell
+uv run alembic revision --autogenerate -m "description"
+```
+
+Task 5A introduces no business tables or migration revisions. The engine opens connections
+lazily, so application startup does not require PostgreSQL to be immediately available.
+Sessions do not auto-commit; services own transaction boundaries. Database credentials must
+remain in environment variables and must never be committed.
+
 ## Application structure
 
 - `app/api/router.py` is the central API router registry.
 - `app/api/routes` contains HTTP route modules.
 - `app/core` contains configuration and logging.
+- `app/db` contains asynchronous engine, session, and connectivity helpers.
 - `app/common` contains stable shared constants.
 - `app/schemas` contains API request and response schemas.
 
@@ -59,8 +90,8 @@ Errors use a standardized `error` envelope containing a stable code, a safe mess
 structured details, and the request ID. Internal exceptions are logged with their request ID
 but their messages and tracebacks are not exposed to clients.
 
-`app/api/dependencies.py` contains explicit FastAPI dependency aliases. No database or
-authentication dependencies exist yet.
+`app/api/dependencies.py` contains explicit FastAPI dependency aliases. No authentication
+dependencies exist yet.
 
 Business modules will be introduced only in later roadmap tasks.
 
@@ -135,6 +166,12 @@ Run tests inside the backend container:
 docker compose exec backend uv run pytest
 ```
 
+Verify the Docker database connection:
+
+```shell
+docker compose exec backend uv run python -m app.db.check
+```
+
 Stop services without deleting data:
 
 ```shell
@@ -156,5 +193,5 @@ Local endpoints:
 - <http://127.0.0.1:8000/api/v1/health>
 - <http://127.0.0.1:8000/docs>
 
-PostgreSQL and Redis are provisioned for local development, but application
-integration will be implemented in later frozen roadmap tasks.
+PostgreSQL and Redis are provisioned for local development. PostgreSQL connectivity is wired
+into the application lifecycle; Redis application integration remains for a later roadmap task.
