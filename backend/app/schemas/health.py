@@ -1,18 +1,20 @@
 from pydantic import BaseModel
 
+from app.schemas.common import SingleResourceResponse
+
 
 class RootStatusData(BaseModel):
     name: str
     status: str
 
 
-class RootStatusResponse(BaseModel):
-    data: RootStatusData
-
-
 class HealthData(BaseModel):
     status: str
 
 
-class HealthResponse(BaseModel):
-    data: HealthData
+class RootStatusResponse(SingleResourceResponse[RootStatusData]):
+    pass
+
+
+class HealthResponse(SingleResourceResponse[HealthData]):
+    pass

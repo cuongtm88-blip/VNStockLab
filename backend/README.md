@@ -48,6 +48,20 @@ uv run mypy app tests
 - `app/common` contains stable shared constants.
 - `app/schemas` contains API request and response schemas.
 
+## Request and response conventions
+
+Every request receives an `X-Request-ID` response header. Clients may supply a UUID in
+`X-Correlation-ID`; valid UUIDs are preserved as the request ID, while missing or invalid
+values are replaced with a generated UUID. Successful response envelopes include the same
+identifier as `meta.request_id`.
+
+Errors use a standardized `error` envelope containing a stable code, a safe message,
+structured details, and the request ID. Internal exceptions are logged with their request ID
+but their messages and tracebacks are not exposed to clients.
+
+`app/api/dependencies.py` contains explicit FastAPI dependency aliases. No database or
+authentication dependencies exist yet.
+
 Business modules will be introduced only in later roadmap tasks.
 
 ## Pre-commit hooks

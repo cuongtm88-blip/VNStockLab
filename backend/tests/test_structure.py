@@ -1,8 +1,10 @@
 import importlib.util
+from uuid import uuid4
 
 from app.api.router import api_router
 from app.api.routes import health
 from app.main import app
+from app.schemas.common import ResponseMeta
 from app.schemas.health import (
     HealthData,
     HealthResponse,
@@ -12,12 +14,15 @@ from app.schemas.health import (
 
 
 def test_foundation_modules_and_schemas() -> None:
+    meta = ResponseMeta(request_id=uuid4())
     assert health.router is not None
     assert (
-        RootStatusResponse(data=RootStatusData(name="VNStockLab API", status="running")).data.status
+        RootStatusResponse(
+            data=RootStatusData(name="VNStockLab API", status="running"), meta=meta
+        ).data.status
         == "running"
     )
-    assert HealthResponse(data=HealthData(status="ok")).data.status == "ok"
+    assert HealthResponse(data=HealthData(status="ok"), meta=meta).data.status == "ok"
 
 
 def test_old_health_module_no_longer_exists() -> None:
