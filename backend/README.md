@@ -65,10 +65,13 @@ In a future task, create a migration with:
 uv run alembic revision --autogenerate -m "description"
 ```
 
-Task 5A introduces no business tables or migration revisions. The engine opens connections
-lazily, so application startup does not require PostgreSQL to be immediately available.
-Sessions do not auto-commit; services own transaction boundaries. Database credentials must
-remain in environment variables and must never be committed.
+The reusable ORM base and mixins live in `app/db/base.py`; Alembic uses their shared metadata
+for autogeneration. Repositories add, fetch, or delete entities but never commit. The async Unit
+of Work exposes explicit commit and rollback operations, rolls back exceptions, and does not
+commit when its context exits. No business tables or migration revisions are defined yet. The
+engine opens connections lazily, so application startup does not require PostgreSQL to be
+immediately available. Database credentials must remain in environment variables and must
+never be committed.
 
 ## Application structure
 
