@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
@@ -500,6 +501,14 @@ def live_prices(symbol: str, count: int = 300) -> pd.DataFrame:
     return VnstockProvider().history(symbol, count=count)
 
 
+@st.cache_data(ttl=900, max_entries=64, show_spinner=False)
+def cached_analysis(
+    prices: pd.DataFrame, benchmark: pd.DataFrame | None = None
+) -> AnalysisResult:
+    """Reuse technical analysis across UI-only reruns for the same market snapshot."""
+    return analyze(prices, benchmark=benchmark)
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def index_members(index: str) -> tuple[str, ...]:
     """Load index constituents with an hourly cache."""
@@ -585,15 +594,22 @@ def render_analysis() -> None:
             prices = load_price_csv(uploaded)
         elif source == "Thị trường thực":
             with st.spinner(f"Đang tải dữ liệu {symbol}..."):
-                prices = live_prices(symbol)
-            try:
-                benchmark = live_prices("VNINDEX")
-            except MarketDataError as error:
-                benchmark_warning = str(error)
+                if symbol == "VNINDEX":
+                    prices = live_prices(symbol)
+                    benchmark = prices
+                else:
+                    with ThreadPoolExecutor(max_workers=2) as executor:
+                        price_future = executor.submit(live_prices, symbol)
+                        benchmark_future = executor.submit(live_prices, "VNINDEX")
+                        prices = price_future.result()
+                        try:
+                            benchmark = benchmark_future.result()
+                        except MarketDataError as error:
+                            benchmark_warning = str(error)
         else:
             prices = generate_demo_prices(symbol)
             benchmark = generate_demo_prices("VNINDEX")
-        result = analyze(prices, benchmark=benchmark)
+        result = cached_analysis(prices, benchmark)
     except (ValueError, MarketDataError) as error:
         st.error(str(error))
         return
