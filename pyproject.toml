@@ -1,0 +1,37 @@
+[project]
+name = "vnstocklab"
+version = "0.1.0"
+description = "Vietnam stock market technical analysis workspace"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "plotly>=6.0",
+    "streamlit>=1.46",
+    "vnstock>=4.0.4,<5",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.16",
+    "pandas-stubs>=2.2",
+    "pytest>=8.4",
+    "ruff>=0.12",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+packages = ["vnstocklab"]
