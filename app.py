@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
@@ -598,14 +597,11 @@ def render_analysis() -> None:
                     prices = live_prices(symbol)
                     benchmark = prices
                 else:
-                    with ThreadPoolExecutor(max_workers=2) as executor:
-                        price_future = executor.submit(live_prices, symbol)
-                        benchmark_future = executor.submit(live_prices, "VNINDEX")
-                        prices = price_future.result()
-                        try:
-                            benchmark = benchmark_future.result()
-                        except MarketDataError as error:
-                            benchmark_warning = str(error)
+                    prices = live_prices(symbol)
+                    try:
+                        benchmark = live_prices("VNINDEX")
+                    except MarketDataError as error:
+                        benchmark_warning = str(error)
         else:
             prices = generate_demo_prices(symbol)
             benchmark = generate_demo_prices("VNINDEX")
