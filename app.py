@@ -500,14 +500,6 @@ def live_prices(symbol: str, count: int = 300) -> pd.DataFrame:
     return VnstockProvider().history(symbol, count=count)
 
 
-@st.cache_data(ttl=900, max_entries=64, show_spinner=False)
-def cached_analysis(
-    prices: pd.DataFrame, benchmark: pd.DataFrame | None = None
-) -> AnalysisResult:
-    """Reuse technical analysis across UI-only reruns for the same market snapshot."""
-    return analyze(prices, benchmark=benchmark)
-
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def index_members(index: str) -> tuple[str, ...]:
     """Load index constituents with an hourly cache."""
@@ -605,7 +597,7 @@ def render_analysis() -> None:
         else:
             prices = generate_demo_prices(symbol)
             benchmark = generate_demo_prices("VNINDEX")
-        result = cached_analysis(prices, benchmark)
+        result = analyze(prices, benchmark=benchmark)
     except (ValueError, MarketDataError) as error:
         st.error(str(error))
         return
