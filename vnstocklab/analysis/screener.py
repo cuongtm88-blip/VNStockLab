@@ -24,6 +24,30 @@ class ScreeningResult:
     breadth: MarketBreadth
 
 
+def filter_screening_rows(
+    rows: pd.DataFrame,
+    *,
+    minimum_score: int = 0,
+    signals: tuple[str, ...] = (),
+    trends: tuple[str, ...] = (),
+    rsi_range: tuple[float, float] = (0.0, 100.0),
+    minimum_cmf: float = -1.0,
+    minimum_adx: float = 0.0,
+) -> pd.DataFrame:
+    """Filter an existing screening table without requesting market data again."""
+    if rows.empty:
+        return rows.copy()
+    selected = rows["Điểm"].ge(minimum_score)
+    if signals:
+        selected &= rows["Tín hiệu"].isin(signals)
+    if trends:
+        selected &= rows["Xu hướng"].isin(trends)
+    selected &= rows["RSI 14"].between(*rsi_range, inclusive="both")
+    selected &= rows["CMF 20"].ge(minimum_cmf)
+    selected &= rows["ADX 14"].ge(minimum_adx)
+    return rows.loc[selected].reset_index(drop=True)
+
+
 def screen_symbols(
     symbols: tuple[str, ...],
     provider: MarketDataProvider,

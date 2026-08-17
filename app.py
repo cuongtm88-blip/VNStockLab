@@ -37,6 +37,7 @@ from vnstocklab.analysis import (
     detect_breadth_alert,
     detect_symbol_alerts,
     execute_replay_order,
+    filter_screening_rows,
     queue_replay_order,
     replay_equity,
     run_backtest,
@@ -1010,15 +1011,53 @@ def render_screener() -> None:
     symbols = tuple(part.strip().upper() for part in raw_symbols.split(",") if part.strip())[
         : int(limit)
     ]
-    if not st.button("Chạy sàng lọc", type="primary", disabled=not symbols):
+    if st.button("Chạy sàng lọc", type="primary", disabled=not symbols):
+        st.session_state.screened_result = run_market_screen(symbols, source)
+        st.session_state.screened_context = f"{basket_label} · {source}"
+
+    screened = st.session_state.get("screened_result")
+    if not isinstance(screened, ScreeningResult):
         st.info("Chọn danh sách mã và bấm “Chạy sàng lọc”.")
         return
 
-    screened = run_market_screen(symbols, source)
     if screened.rows.empty:
         st.error("Không có mã nào đủ dữ liệu để phân tích.")
     else:
-        display = screened.rows.copy()
+        st.caption(f"Kết quả gần nhất: {st.session_state.get('screened_context', 'Tùy chỉnh')}")
+        st.markdown("#### Điều kiện lọc kết quả")
+        filter_row_1 = st.columns([1, 2, 2])
+        minimum_score = filter_row_1[0].slider(
+            "Điểm tối thiểu", 0, 100, 50, 5, key="screen_minimum_score"
+        )
+        available_signals = sorted(screened.rows["Tín hiệu"].dropna().astype(str).unique())
+        signals = filter_row_1[1].multiselect(
+            "Tín hiệu", available_signals, key="screen_filter_signals"
+        )
+        available_trends = sorted(screened.rows["Xu hướng"].dropna().astype(str).unique())
+        trends = filter_row_1[2].multiselect(
+            "Xu hướng", available_trends, key="screen_filter_trends"
+        )
+
+        filter_row_2 = st.columns(3)
+        rsi_range = filter_row_2[0].slider(
+            "Khoảng RSI 14", 0, 100, (30, 70), 5, key="screen_rsi_range"
+        )
+        minimum_cmf = filter_row_2[1].slider(
+            "CMF 20 tối thiểu", -1.0, 1.0, 0.0, 0.05, key="screen_minimum_cmf"
+        )
+        minimum_adx = filter_row_2[2].slider(
+            "ADX 14 tối thiểu", 0, 100, 20, 5, key="screen_minimum_adx"
+        )
+        filtered = filter_screening_rows(
+            screened.rows,
+            minimum_score=minimum_score,
+            signals=tuple(signals),
+            trends=tuple(trends),
+            rsi_range=(float(rsi_range[0]), float(rsi_range[1])),
+            minimum_cmf=minimum_cmf,
+            minimum_adx=minimum_adx,
+        )
+        display = filtered.copy()
         numeric_columns = [
             "Giá",
             "% thay đổi",
@@ -1034,6 +1073,7 @@ def render_screener() -> None:
             "Kháng cự",
         ]
         display[numeric_columns] = display[numeric_columns].round(2)
+        st.caption(f"Đạt điều kiện: {len(display)}/{len(screened.rows)} mã")
         st.dataframe(
             display,
             width="stretch",
@@ -1043,6 +1083,25 @@ def render_screener() -> None:
                 "Điểm": st.column_config.ProgressColumn(min_value=0, max_value=100),
             },
         )
+        actions = st.columns([1, 1, 3])
+        if actions[0].button(
+            "Lưu danh sách đạt",
+            icon=":material/bookmark_add:",
+            disabled=display.empty,
+            key="save_screen_shortlist",
+        ):
+            st.session_state.screen_shortlist = tuple(display["Mã"].astype(str))
+        actions[1].download_button(
+            "Tải CSV",
+            data=display.to_csv(index=False).encode("utf-8-sig"),
+            file_name="vnstocklab_screener.csv",
+            mime="text/csv",
+            icon=":material/download:",
+            disabled=display.empty,
+        )
+        shortlist = st.session_state.get("screen_shortlist", ())
+        if shortlist:
+            actions[2].caption("Danh sách đã lưu trong phiên: " + ", ".join(shortlist))
     if screened.errors:
         with st.expander(f"{len(screened.errors)} mã không xử lý được"):
             for error in screened.errors:

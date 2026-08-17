@@ -63,7 +63,7 @@ from vnstocklab.analysis.relative_strength import (
 )
 from vnstocklab.analysis.risk import RiskPlan, build_risk_plan
 from vnstocklab.analysis.scorecard import CategoryScore, TechnicalScorecard, build_scorecard
-from vnstocklab.analysis.screener import ScreeningResult, screen_symbols
+from vnstocklab.analysis.screener import ScreeningResult, filter_screening_rows, screen_symbols
 from vnstocklab.analysis.strategy_lab import (
     ExplorationRow,
     PortfolioTrade,
@@ -102,6 +102,7 @@ __all__ = [
     "ReplayTrade",
     "RiskPlan",
     "ScreeningResult",
+    "filter_screening_rows",
     "SupportResistanceAnalysis",
     "StructureEvent",
     "StructurePoint",
