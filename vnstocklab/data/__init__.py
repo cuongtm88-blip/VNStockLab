@@ -1,5 +1,6 @@
 """Market data adapters."""
 
+from vnstocklab.data.baskets import BASKET_FALLBACKS, MARKET_BASKETS, basket_fallback
 from vnstocklab.data.demo import VN30_SYMBOLS, generate_demo_prices
 from vnstocklab.data.provider import (
     MarketDataError,
@@ -10,7 +11,10 @@ from vnstocklab.data.provider import (
 from vnstocklab.data.vnstock_provider import VnstockProvider
 
 __all__ = [
+    "BASKET_FALLBACKS",
+    "MARKET_BASKETS",
     "VN30_SYMBOLS",
+    "basket_fallback",
     "MarketDataError",
     "MarketDataProvider",
     "MarketTick",

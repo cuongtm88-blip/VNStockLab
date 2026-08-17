@@ -44,7 +44,13 @@ from vnstocklab.analysis import (
     screen_symbols,
     suggest_rebalance,
 )
-from vnstocklab.data import VN30_SYMBOLS, MarketDataError, VnstockProvider, generate_demo_prices
+from vnstocklab.data import (
+    MARKET_BASKETS,
+    MarketDataError,
+    VnstockProvider,
+    basket_fallback,
+    generate_demo_prices,
+)
 from vnstocklab.data.csv_loader import load_price_csv
 from vnstocklab.storage import SQLiteRepository
 
@@ -494,13 +500,13 @@ def ichimoku_chart(result: AnalysisResult, symbol: str) -> go.Figure:
     return figure
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=900, max_entries=256, show_spinner=False)
 def live_prices(symbol: str, count: int = 300) -> pd.DataFrame:
     """Load live-provider history with a short cache to conserve request quota."""
     return VnstockProvider().history(symbol, count=count)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600, max_entries=16, show_spinner=False)
 def index_members(index: str) -> tuple[str, ...]:
     """Load index constituents with an hourly cache."""
     return VnstockProvider().index_members(index)
@@ -536,7 +542,7 @@ class DemoBasketProvider:
         return generate_demo_prices(symbol, periods=count)
 
     def index_members(self, index: str = "VN30") -> tuple[str, ...]:
-        return VN30_SYMBOLS
+        return basket_fallback(index)
 
 
 def run_market_screen(symbols: tuple[str, ...], source: str) -> ScreeningResult:
@@ -981,20 +987,26 @@ def render_screener() -> None:
     source = controls[0].selectbox(
         "Nguồn", ["Thị trường thực", "Dữ liệu demo"], key="screen_source"
     )
-    index = controls[1].selectbox("Rổ chỉ số", ["VN30"], key="screen_index")
+    basket_label = controls[1].selectbox("Rổ chỉ số", list(MARKET_BASKETS), key="screen_index")
+    index = MARKET_BASKETS[basket_label]
     limit = controls[2].number_input("Số mã", min_value=3, max_value=17, value=10, step=1)
 
     if source == "Dữ liệu demo":
-        default_symbols = ", ".join(VN30_SYMBOLS[: int(limit)])
+        default_symbols = ", ".join(basket_fallback(index)[: int(limit)])
     else:
         try:
             available = index_members(index)
             default_symbols = ", ".join(available[: int(limit)])
         except MarketDataError as error:
             st.warning(f"Không tải được thành phần {index}; dùng danh sách dự phòng. {error}")
-            default_symbols = ", ".join(VN30_SYMBOLS[: int(limit)])
+            default_symbols = ", ".join(basket_fallback(index)[: int(limit)])
 
-    raw_symbols = controls[3].text_input("Danh sách mã", value=default_symbols)
+    raw_symbols = controls[3].text_input(
+        "Danh sách mã",
+        value=default_symbols,
+        key=f"screen_symbols_{source}_{index}_{int(limit)}",
+        help="Có thể sửa danh sách này để sàng lọc một nhóm mã tùy chỉnh.",
+    )
     symbols = tuple(part.strip().upper() for part in raw_symbols.split(",") if part.strip())[
         : int(limit)
     ]
@@ -1048,21 +1060,25 @@ def render_market_breadth() -> None:
     source = controls[0].selectbox(
         "Nguồn", ["Thị trường thực", "Dữ liệu demo"], key="breadth_source"
     )
-    index = controls[1].selectbox("Rổ chỉ số", ["VN30"], key="breadth_index")
+    basket_label = controls[1].selectbox("Rổ chỉ số", list(MARKET_BASKETS), key="breadth_index")
+    index = MARKET_BASKETS[basket_label]
     limit = controls[2].number_input(
         "Số mã", min_value=3, max_value=17, value=12, step=1, key="breadth_limit"
     )
     if source == "Dữ liệu demo":
-        default_symbols = ", ".join(VN30_SYMBOLS[: int(limit)])
+        default_symbols = ", ".join(basket_fallback(index)[: int(limit)])
     else:
         try:
             available = index_members(index)
             default_symbols = ", ".join(available[: int(limit)])
         except MarketDataError as error:
             st.warning(f"Không tải được thành phần {index}; dùng danh sách dự phòng. {error}")
-            default_symbols = ", ".join(VN30_SYMBOLS[: int(limit)])
+            default_symbols = ", ".join(basket_fallback(index)[: int(limit)])
     raw_symbols = controls[3].text_input(
-        "Danh sách mã", value=default_symbols, key="breadth_symbols"
+        "Danh sách mã",
+        value=default_symbols,
+        key=f"breadth_symbols_{source}_{index}_{int(limit)}",
+        help="Có thể sửa danh sách này để đo độ rộng của một nhóm mã tùy chỉnh.",
     )
     symbols = tuple(part.strip().upper() for part in raw_symbols.split(",") if part.strip())[
         : int(limit)

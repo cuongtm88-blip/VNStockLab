@@ -1,0 +1,106 @@
+"""Supported market baskets and resilient fallback constituents."""
+
+from __future__ import annotations
+
+MARKET_BASKETS: dict[str, str] = {
+    "VN30": "VN30",
+    "VN100": "VN100",
+    "HNX30": "HNX30",
+    "HOSE (VNINDEX)": "VNINDEX",
+}
+
+# These liquid representatives keep the UI usable when the free reference API is
+# temporarily unavailable. Live mode still requests the current constituents.
+BASKET_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "VN30": (
+        "ACB",
+        "BID",
+        "CTG",
+        "FPT",
+        "GAS",
+        "GVR",
+        "HDB",
+        "HPG",
+        "LPB",
+        "MBB",
+        "MSN",
+        "MWG",
+        "SAB",
+        "SHB",
+        "SSB",
+        "STB",
+        "TCB",
+        "VCB",
+        "VHM",
+        "VIC",
+    ),
+    "VN100": (
+        "ACB",
+        "BCM",
+        "BID",
+        "CTG",
+        "DGC",
+        "FPT",
+        "GAS",
+        "GMD",
+        "GVR",
+        "HDB",
+        "HPG",
+        "KDH",
+        "MBB",
+        "MSN",
+        "MWG",
+        "NLG",
+        "SSI",
+        "STB",
+        "TCB",
+        "VCB",
+    ),
+    "HNX30": (
+        "BVS",
+        "CEO",
+        "DHT",
+        "DTD",
+        "HUT",
+        "IDC",
+        "LAS",
+        "L14",
+        "MBS",
+        "NVB",
+        "PVB",
+        "PVC",
+        "PVS",
+        "SHS",
+        "TIG",
+        "TNG",
+        "VC3",
+        "VCS",
+    ),
+    "VNINDEX": (
+        "ACB",
+        "BID",
+        "CTG",
+        "DGC",
+        "FPT",
+        "GAS",
+        "GMD",
+        "GVR",
+        "HDB",
+        "HPG",
+        "MBB",
+        "MSN",
+        "MWG",
+        "SSI",
+        "STB",
+        "TCB",
+        "VCB",
+        "VHM",
+        "VIC",
+        "VNM",
+    ),
+}
+
+
+def basket_fallback(index: str) -> tuple[str, ...]:
+    """Return stable fallback symbols for a normalized index code."""
+    return BASKET_FALLBACKS.get(index.strip().upper(), BASKET_FALLBACKS["VN30"])
