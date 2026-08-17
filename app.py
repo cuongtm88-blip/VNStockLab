@@ -585,15 +585,11 @@ def render_analysis() -> None:
             prices = load_price_csv(uploaded)
         elif source == "Thị trường thực":
             with st.spinner(f"Đang tải dữ liệu {symbol}..."):
-                if symbol == "VNINDEX":
-                    prices = live_prices(symbol)
-                    benchmark = prices
-                else:
-                    prices = live_prices(symbol)
-                    try:
-                        benchmark = live_prices("VNINDEX")
-                    except MarketDataError as error:
-                        benchmark_warning = str(error)
+                prices = live_prices(symbol)
+            try:
+                benchmark = live_prices("VNINDEX")
+            except MarketDataError as error:
+                benchmark_warning = str(error)
         else:
             prices = generate_demo_prices(symbol)
             benchmark = generate_demo_prices("VNINDEX")
