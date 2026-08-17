@@ -50,6 +50,7 @@ from vnstocklab.analysis.market_breadth import (
     analyze_market_breadth,
     unavailable_breadth,
 )
+from vnstocklab.analysis.market_regime import MarketRegime, evaluate_market_regime
 from vnstocklab.analysis.patterns import PricePattern, analyze_price_patterns
 from vnstocklab.analysis.portfolio import (
     PortfolioPosition,
@@ -91,6 +92,7 @@ __all__ = [
     "IchimokuSnapshot",
     "MultiTimeframeIchimoku",
     "MarketBreadth",
+    "MarketRegime",
     "Pivot",
     "PriceZone",
     "PortfolioTrade",
@@ -131,6 +133,7 @@ __all__ = [
     "detect_symbol_alerts",
     "execute_replay_order",
     "evaluate_execution_gate",
+    "evaluate_market_regime",
     "queue_replay_order",
     "screen_symbols",
     "suggest_rebalance",

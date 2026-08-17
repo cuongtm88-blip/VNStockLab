@@ -15,6 +15,7 @@ from vnstocklab.analysis import (
     AnalysisResult,
     CandlestickEvent,
     DowAnalysis,
+    MarketRegime,
     MultiTimeframeIchimoku,
     PortfolioTransaction,
     PricePattern,
@@ -37,6 +38,7 @@ from vnstocklab.analysis import (
     candlestick_events,
     detect_breadth_alert,
     detect_symbol_alerts,
+    evaluate_market_regime,
     execute_replay_order,
     filter_screening_rows,
     queue_replay_order,
@@ -570,6 +572,128 @@ def run_market_screen(symbols: tuple[str, ...], source: str) -> ScreeningResult:
         return screen_symbols(symbols, provider)
     finally:
         progress.empty()
+
+
+def render_market_dashboard() -> None:
+    """Render the market regime and portfolio-level operating guidance."""
+    st.subheader("Thị trường chung")
+    st.caption(
+        "Đánh giá bối cảnh trước khi tìm điểm mua. Tỷ trọng là dải quản trị rủi ro "
+        "tham khảo, không phải cam kết lợi nhuận."
+    )
+    controls = st.columns([1, 1, 1, 3])
+    source = controls[0].selectbox(
+        "Nguồn", ["Thị trường thực", "Dữ liệu demo"], key="regime_source"
+    )
+    basket_label = controls[1].selectbox(
+        "Rổ đo độ rộng", list(MARKET_BASKETS), key="regime_index"
+    )
+    index = MARKET_BASKETS[basket_label]
+    limit = int(
+        controls[2].number_input(
+            "Số mã", min_value=3, max_value=17, value=12, step=1, key="regime_limit"
+        )
+    )
+    if source == "Dữ liệu demo":
+        default_symbols = ", ".join(basket_fallback(index)[:limit])
+    else:
+        try:
+            default_symbols = ", ".join(index_members(index)[:limit])
+        except MarketDataError as error:
+            st.warning(f"Không tải được thành phần {index}; dùng danh sách dự phòng. {error}")
+            default_symbols = ", ".join(basket_fallback(index)[:limit])
+    raw_symbols = controls[3].text_input(
+        "Danh sách đại diện",
+        value=default_symbols,
+        key=f"regime_symbols_{source}_{index}_{limit}",
+    )
+    symbols = tuple(part.strip().upper() for part in raw_symbols.split(",") if part.strip())[
+        :limit
+    ]
+    if st.button(
+        "Đánh giá thị trường",
+        type="primary",
+        icon=":material/monitoring:",
+        disabled=len(symbols) < 3,
+        key="run_market_regime",
+    ):
+        try:
+            screened = run_market_screen(symbols, source)
+            index_prices = (
+                generate_demo_prices("VNINDEX", 300)
+                if source == "Dữ liệu demo"
+                else live_prices("VNINDEX", 300)
+            )
+            index_analysis = analyze(index_prices, market_breadth=screened.breadth)
+            latest = index_analysis.data.iloc[-1]
+            regime = evaluate_market_regime(
+                index_score=index_analysis.score,
+                index_trend=index_analysis.trend,
+                close=float(latest["close"]),
+                sma20=float(latest["sma20"]),
+                sma50=float(latest["sma50"]),
+                breadth=screened.breadth,
+            )
+            st.session_state.market_regime_snapshot = (regime, index_analysis, screened)
+            st.session_state.market_regime_context = f"{basket_label} · {source}"
+        except (MarketDataError, ValueError) as error:
+            st.error(str(error))
+
+    snapshot = st.session_state.get("market_regime_snapshot")
+    if not isinstance(snapshot, tuple) or len(snapshot) != 3:
+        st.info("Chọn rổ đại diện và bấm “Đánh giá thị trường”.")
+        return
+    regime, index_analysis, screened = snapshot
+    if not isinstance(regime, MarketRegime) or not isinstance(screened, ScreeningResult):
+        st.warning("Ảnh chụp thị trường không hợp lệ; vui lòng đánh giá lại.")
+        return
+    st.caption(f"Kết quả gần nhất: {st.session_state.get('market_regime_context', 'Tùy chỉnh')}")
+    stock_range = f"{regime.stock_allocation[0]}–{regime.stock_allocation[1]}%"
+    cash_range = f"{regime.cash_allocation[0]}–{regime.cash_allocation[1]}%"
+    with st.container(horizontal=True):
+        st.metric("Chế độ thị trường", regime.state, border=True)
+        st.metric("Điểm chế độ", f"{regime.score}/100", border=True)
+        st.metric("Mức rủi ro", regime.risk_level, border=True)
+        st.metric("Tỷ trọng cổ phiếu", stock_range, border=True)
+        st.metric("Tỷ trọng tiền mặt", cash_range, border=True)
+    if regime.state in {"Tấn công", "Tích cực có chọn lọc"}:
+        st.success(regime.buy_policy)
+    else:
+        st.warning(regime.buy_policy)
+    rationale, candidates = st.columns([2, 3])
+    with rationale.container(border=True):
+        st.markdown("#### Luận điểm thị trường")
+        for reason in regime.reasons:
+            st.write(f"- {reason}")
+    with candidates.container(border=True):
+        st.markdown("#### Mã đáng theo dõi trong lượt quét")
+        candidate_rows = screened.rows[
+            screened.rows["Tín hiệu"].isin(["MUA THĂM DÒ", "NẮM GIỮ"])
+        ].head(5)
+        if candidate_rows.empty:
+            st.info("Chưa có mã đạt trạng thái theo dõi trong nhóm đang quét.")
+        else:
+            st.dataframe(
+                candidate_rows[["Mã", "Điểm", "Tín hiệu", "Xu hướng", "Stop-loss", "Mục tiêu"]],
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Điểm": st.column_config.ProgressColumn(min_value=0, max_value=100),
+                },
+            )
+    if screened.breadth.available and not screened.breadth.history.empty:
+        st.markdown("#### Diễn biến độ rộng")
+        breadth_history = screened.breadth.history.tail(60).reset_index()
+        st.line_chart(
+            breadth_history,
+            x=breadth_history.columns[0],
+            y=["above_sma20_pct", "above_sma50_pct", "above_sma200_pct"],
+            y_label="Tỷ lệ mã (%)",
+        )
+    if screened.errors:
+        with st.expander(f"{len(screened.errors)} cảnh báo dữ liệu"):
+            for error in screened.errors:
+                st.write(error)
 
 
 def render_analysis() -> None:
@@ -2272,6 +2396,7 @@ st.caption("Không gian phân tích kỹ thuật cổ phiếu Việt Nam")
 workspace = st.segmented_control(
     "Không gian làm việc",
     [
+        "Thị trường chung",
         "Phân tích một mã",
         "Bộ sàng lọc",
         "Độ rộng thị trường",
@@ -2280,10 +2405,12 @@ workspace = st.segmented_control(
         "Portfolio Manager",
         "Alert Center",
     ],
-    default="Phân tích một mã",
+    default="Thị trường chung",
     label_visibility="collapsed",
 )
-if workspace == "Phân tích một mã":
+if workspace == "Thị trường chung":
+    render_market_dashboard()
+elif workspace == "Phân tích một mã":
     render_analysis()
 elif workspace == "Bộ sàng lọc":
     render_screener()
