@@ -4,6 +4,7 @@ from vnstocklab.analysis.alerts import (
     AlertEvent,
     AlertRule,
     AlertSnapshot,
+    alert_rules_from_screening,
     detect_breadth_alert,
     detect_symbol_alerts,
 )
@@ -77,6 +78,7 @@ __all__ = [
     "AlertEvent",
     "AlertRule",
     "AlertSnapshot",
+    "alert_rules_from_screening",
     "BacktestResult",
     "BacktestTrade",
     "Breakout",

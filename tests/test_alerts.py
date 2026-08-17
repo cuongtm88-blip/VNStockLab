@@ -2,7 +2,12 @@ from types import SimpleNamespace
 
 import pandas as pd
 
-from vnstocklab.analysis.alerts import AlertRule, AlertSnapshot, detect_symbol_alerts
+from vnstocklab.analysis.alerts import (
+    AlertRule,
+    AlertSnapshot,
+    alert_rules_from_screening,
+    detect_symbol_alerts,
+)
 
 
 def result(signal: str = "MUA THĂM DÒ", trend: str = "Tăng", close: float = 100) -> SimpleNamespace:
@@ -34,3 +39,22 @@ def test_detects_trend_transition_and_stop_loss() -> None:
         "Xu hướng",
         "Stop-loss",
     }
+
+
+def test_detects_score_threshold_crossing_once() -> None:
+    alerts, snapshot = detect_symbol_alerts(
+        result(signal="NẮM GIỮ"), AlertRule("FPT", minimum_score=60)
+    )
+    assert {event.category for event in alerts} == {"Điểm kỹ thuật"}
+    repeated, _ = detect_symbol_alerts(
+        result(signal="NẮM GIỮ"), AlertRule("FPT", minimum_score=60), snapshot
+    )
+    assert not repeated
+
+
+def test_builds_alert_rules_from_screening_rows() -> None:
+    rows = pd.DataFrame(
+        {"Mã": ["FPT", "HPG"], "Stop-loss": [90.0, 20.0], "Mục tiêu": [120.0, 30.0]}
+    )
+    rules = alert_rules_from_screening(rows, ("FPT",), minimum_score=65)
+    assert rules == (AlertRule("FPT", 90.0, 120.0, 65),)

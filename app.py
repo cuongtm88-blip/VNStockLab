@@ -24,6 +24,7 @@ from vnstocklab.analysis import (
     SupportResistanceAnalysis,
     TechnicalScorecard,
     add_ichimoku,
+    alert_rules_from_screening,
     analyze,
     analyze_dow_structure,
     analyze_market_breadth,
@@ -1640,22 +1641,69 @@ def render_alert_center() -> None:
         persist_state="session",
     )
     with st.form("alert_rule_form", border=True):
-        inputs = st.columns([1, 1, 1, 1])
+        inputs = st.columns([1, 1, 1, 1, 1])
         symbol = inputs[0].text_input("Mã", value="FPT", max_chars=12).strip().upper()
         stop = float(inputs[1].number_input("Stop-loss (0 = tắt)", 0.0, step=1.0))
         target = float(inputs[2].number_input("Mục tiêu (0 = tắt)", 0.0, step=1.0))
-        add_rule = inputs[3].form_submit_button(
+        minimum_score = int(
+            inputs[3].number_input("Điểm tối thiểu (0 = tắt)", 0, 100, 60, step=5)
+        )
+        add_rule = inputs[4].form_submit_button(
             "Thêm/cập nhật", type="primary", icon=":material/notifications_active:"
         )
     if add_rule:
         if not symbol:
             st.error("Mã cổ phiếu không được để trống.")
         else:
-            rule = AlertRule(symbol, stop or None, target or None)
+            rule = AlertRule(symbol, stop or None, target or None, minimum_score or None)
             repository.upsert_alert_rule(rule)
             rules = [item for item in st.session_state.alert_rules if item.symbol != symbol]
             st.session_state.alert_rules = [*rules, rule]
             st.toast(f"Đã cập nhật cảnh báo cho {symbol}")
+
+    shortlist = tuple(st.session_state.get("screen_shortlist", ()))
+    screened = st.session_state.get("screened_result")
+    if shortlist and isinstance(screened, ScreeningResult):
+        with st.container(border=True):
+            st.markdown("#### Nhập từ bộ sàng lọc")
+            batch = st.columns([3, 1, 1, 1], vertical_alignment="bottom")
+            selected_symbols = batch[0].multiselect(
+                "Danh sách đã lọc",
+                shortlist,
+                default=shortlist,
+                key="alert_batch_symbols",
+            )
+            batch_score = int(
+                batch[1].number_input(
+                    "Điểm tối thiểu", 0, 100, 60, 5, key="alert_batch_score"
+                )
+            )
+            overwrite = batch[2].toggle(
+                "Ghi đè quy tắc cũ", value=False, key="alert_batch_overwrite"
+            )
+            import_rules = batch[3].button(
+                "Tạo cảnh báo",
+                type="primary",
+                icon=":material/add_alert:",
+                disabled=not selected_symbols,
+                key="import_screen_alerts",
+            )
+            if import_rules:
+                candidates = alert_rules_from_screening(
+                    screened.rows, tuple(selected_symbols), batch_score or None
+                )
+                existing = {rule.symbol: rule for rule in st.session_state.alert_rules}
+                added = 0
+                skipped = 0
+                for rule in candidates:
+                    if rule.symbol in existing and not overwrite:
+                        skipped += 1
+                        continue
+                    repository.upsert_alert_rule(rule)
+                    existing[rule.symbol] = rule
+                    added += 1
+                st.session_state.alert_rules = list(existing.values())
+                st.success(f"Đã tạo/cập nhật {added} cảnh báo; bỏ qua {skipped} quy tắc hiện có.")
 
     rules = list(st.session_state.alert_rules)
     if not rules:
@@ -1667,6 +1715,7 @@ def render_alert_center() -> None:
                 "Mã": rule.symbol,
                 "Stop-loss": rule.stop_loss,
                 "Mục tiêu": rule.target_price,
+                "Điểm tối thiểu": rule.minimum_score,
             }
             for rule in rules
         ]

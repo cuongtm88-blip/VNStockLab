@@ -15,6 +15,7 @@ class AlertRule:
     symbol: str
     stop_loss: float | None = None
     target_price: float | None = None
+    minimum_score: int | None = None
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class AlertSnapshot:
     signal: str
     trend: str
     breadth_state: str | None = None
+    score: int | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,20 @@ def detect_symbol_alerts(
     occurred_at = pd.Timestamp(result.data.index[-1])
     close = float(latest["close"])
     events: list[AlertEvent] = []
+    if rule.minimum_score is not None and result.score >= rule.minimum_score and (
+        previous is None or previous.score is None or previous.score < rule.minimum_score
+    ):
+        events.append(
+            _event(
+                symbol,
+                occurred_at,
+                "Điểm kỹ thuật",
+                "Trung bình",
+                f"Điểm kỹ thuật đạt {result.score}/100 (ngưỡng {rule.minimum_score})",
+                close,
+                result.score,
+            )
+        )
     if result.signal in {"MUA THĂM DÒ", "GIẢM TỶ TRỌNG"} and (
         previous is None or previous.signal != result.signal
     ):
@@ -124,7 +140,28 @@ def detect_symbol_alerts(
                 result.score,
             )
         )
-    return tuple(events), AlertSnapshot(result.signal, result.trend)
+    return tuple(events), AlertSnapshot(result.signal, result.trend, score=result.score)
+
+
+def alert_rules_from_screening(
+    rows: pd.DataFrame,
+    symbols: tuple[str, ...],
+    minimum_score: int | None = None,
+) -> tuple[AlertRule, ...]:
+    """Build price and score rules from selected screener rows."""
+    if rows.empty or not symbols:
+        return ()
+    selected_symbols = {symbol.strip().upper() for symbol in symbols}
+    selected = rows[rows["Mã"].astype(str).str.upper().isin(selected_symbols)]
+    return tuple(
+        AlertRule(
+            str(row["Mã"]).upper(),
+            float(row["Stop-loss"]) if pd.notna(row["Stop-loss"]) else None,
+            float(row["Mục tiêu"]) if pd.notna(row["Mục tiêu"]) else None,
+            minimum_score,
+        )
+        for _, row in selected.iterrows()
+    )
 
 
 def detect_breadth_alert(

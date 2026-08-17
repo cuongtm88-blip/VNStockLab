@@ -38,7 +38,8 @@ class SQLiteRepository:
                 CREATE TABLE IF NOT EXISTS alert_rules (
                     symbol TEXT PRIMARY KEY,
                     stop_loss REAL,
-                    target_price REAL
+                    target_price REAL,
+                    minimum_score INTEGER
                 );
                 CREATE TABLE IF NOT EXISTS alert_events (
                     event_id TEXT PRIMARY KEY,
@@ -53,7 +54,8 @@ class SQLiteRepository:
                 CREATE TABLE IF NOT EXISTS alert_snapshots (
                     symbol TEXT PRIMARY KEY,
                     signal TEXT NOT NULL,
-                    trend TEXT NOT NULL
+                    trend TEXT NOT NULL,
+                    score INTEGER
                 );
                 CREATE TABLE IF NOT EXISTS app_metadata (
                     key TEXT PRIMARY KEY,
@@ -61,6 +63,18 @@ class SQLiteRepository:
                 );
                 """
             )
+            rule_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(alert_rules)").fetchall()
+            }
+            if "minimum_score" not in rule_columns:
+                connection.execute("ALTER TABLE alert_rules ADD COLUMN minimum_score INTEGER")
+            snapshot_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(alert_snapshots)").fetchall()
+            }
+            if "score" not in snapshot_columns:
+                connection.execute("ALTER TABLE alert_snapshots ADD COLUMN score INTEGER")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -119,13 +133,15 @@ class SQLiteRepository:
     def list_alert_rules(self) -> list[AlertRule]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT symbol, stop_loss, target_price FROM alert_rules ORDER BY symbol"
+                "SELECT symbol, stop_loss, target_price, minimum_score "
+                "FROM alert_rules ORDER BY symbol"
             ).fetchall()
         return [
             AlertRule(
                 str(row["symbol"]),
                 float(row["stop_loss"]) if row["stop_loss"] is not None else None,
                 float(row["target_price"]) if row["target_price"] is not None else None,
+                int(row["minimum_score"]) if row["minimum_score"] is not None else None,
             )
             for row in rows
         ]
@@ -133,10 +149,12 @@ class SQLiteRepository:
     def upsert_alert_rule(self, rule: AlertRule) -> None:
         with self._connect() as connection:
             connection.execute(
-                "INSERT INTO alert_rules (symbol, stop_loss, target_price) VALUES (?, ?, ?) "
+                "INSERT INTO alert_rules (symbol, stop_loss, target_price, minimum_score) "
+                "VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(symbol) DO UPDATE SET "
-                "stop_loss=excluded.stop_loss, target_price=excluded.target_price",
-                (rule.symbol, rule.stop_loss, rule.target_price),
+                "stop_loss=excluded.stop_loss, target_price=excluded.target_price, "
+                "minimum_score=excluded.minimum_score",
+                (rule.symbol, rule.stop_loss, rule.target_price, rule.minimum_score),
             )
 
     def delete_alert_rule(self, symbol: str) -> None:
@@ -194,19 +212,25 @@ class SQLiteRepository:
     def list_alert_snapshots(self) -> dict[str, AlertSnapshot]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT symbol, signal, trend FROM alert_snapshots"
+                "SELECT symbol, signal, trend, score FROM alert_snapshots"
             ).fetchall()
         return {
-            str(row["symbol"]): AlertSnapshot(str(row["signal"]), str(row["trend"])) for row in rows
+            str(row["symbol"]): AlertSnapshot(
+                str(row["signal"]),
+                str(row["trend"]),
+                score=int(row["score"]) if row["score"] is not None else None,
+            )
+            for row in rows
         }
 
     def upsert_alert_snapshots(self, snapshots: dict[str, AlertSnapshot]) -> None:
         with self._connect() as connection:
             connection.executemany(
-                "INSERT INTO alert_snapshots (symbol, signal, trend) VALUES (?, ?, ?) "
-                "ON CONFLICT(symbol) DO UPDATE SET signal=excluded.signal, trend=excluded.trend",
+                "INSERT INTO alert_snapshots (symbol, signal, trend, score) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(symbol) DO UPDATE SET signal=excluded.signal, "
+                "trend=excluded.trend, score=excluded.score",
                 [
-                    (symbol, snapshot.signal, snapshot.trend)
+                    (symbol, snapshot.signal, snapshot.trend, snapshot.score)
                     for symbol, snapshot in snapshots.items()
                 ],
             )
