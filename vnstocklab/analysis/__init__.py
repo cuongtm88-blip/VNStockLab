@@ -64,6 +64,7 @@ from vnstocklab.analysis.portfolio import (
     build_portfolio,
     suggest_rebalance,
 )
+from vnstocklab.analysis.position_sizing import PositionSizePlan, calculate_position_size
 from vnstocklab.analysis.relative_strength import (
     RelativeStrengthAnalysis,
     analyze_relative_strength,
@@ -105,6 +106,7 @@ __all__ = [
     "PortfolioPosition",
     "PortfolioSummary",
     "PortfolioTransaction",
+    "PositionSizePlan",
     "PricePattern",
     "RelativeStrengthAnalysis",
     "ReplayAccount",
@@ -133,6 +135,7 @@ __all__ = [
     "build_opportunity_pipeline",
     "build_risk_plan",
     "candlestick_events",
+    "calculate_position_size",
     "classify_pivots",
     "classify_market_structure",
     "detect_pivots",

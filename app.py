@@ -37,6 +37,7 @@ from vnstocklab.analysis import (
     build_portfolio,
     build_replay_report,
     build_scorecard,
+    calculate_position_size,
     candlestick_events,
     detect_breadth_alert,
     detect_symbol_alerts,
@@ -789,6 +790,114 @@ def render_opportunity_pipeline() -> None:
     actions[2].caption(
         "“Điểm mua” là điều kiện kỹ thuật cho phép xem xét vào lệnh, không phải lệnh mua tự động."
     )
+
+
+def render_position_sizing() -> None:
+    """Render risk-first order sizing from the latest opportunity pipeline."""
+    st.subheader("Quy mô vị thế")
+    st.caption(
+        "Tính số cổ phiếu tối đa theo stop-loss, ngân sách rủi ro, tiền mặt và "
+        "trần tỷ trọng của chế độ thị trường. Giá nhập theo đơn vị nghìn đồng."
+    )
+    snapshot = st.session_state.get("market_regime_snapshot")
+    if not isinstance(snapshot, tuple) or len(snapshot) != 3:
+        st.info("Hãy chạy “Đánh giá thị trường” trước để có trần tỷ trọng phù hợp.")
+        return
+    regime, _index_analysis, screened = snapshot
+    if not isinstance(regime, MarketRegime) or not isinstance(screened, ScreeningResult):
+        st.warning("Ảnh chụp thị trường không hợp lệ; vui lòng đánh giá lại.")
+        return
+    pipeline = build_opportunity_pipeline(
+        screened.rows,
+        regime,
+        open_position_symbols(app_repository().list_portfolio_transactions()),
+    )
+    candidates = pipeline[pipeline["Giai đoạn"].isin(["Điểm mua", "Chuẩn bị mua"])]
+    if candidates.empty:
+        st.warning("Lượt quét hiện tại chưa có mã ở giai đoạn Điểm mua hoặc Chuẩn bị mua.")
+        return
+    symbol = st.selectbox("Mã dự kiến", candidates["Mã"].astype(str).tolist())
+    selected = candidates[candidates["Mã"] == symbol].iloc[0]
+    left, right = st.columns(2)
+    with left.container(border=True):
+        st.markdown("#### Kế hoạch lệnh")
+        entry = st.number_input(
+            "Giá vào (nghìn đồng)",
+            min_value=0.01,
+            value=float(selected["Giá"]),
+            step=0.1,
+            key=f"position_entry_{symbol}",
+        )
+        stop = st.number_input(
+            "Stop-loss (nghìn đồng)",
+            min_value=0.01,
+            value=float(selected["Stop-loss"]),
+            step=0.1,
+            key=f"position_stop_{symbol}",
+        )
+        st.caption(
+            f"Pipeline: {selected['Giai đoạn']} · Điểm {int(selected['Điểm'])}/100 · "
+            f"Mục tiêu {float(selected['Mục tiêu']):.2f}"
+        )
+    with right.container(border=True):
+        st.markdown("#### Giới hạn tài khoản")
+        capital = st.number_input(
+            "Tổng vốn (đồng)",
+            min_value=1_000_000,
+            value=100_000_000,
+            step=10_000_000,
+        )
+        cash = st.number_input(
+            "Tiền mặt khả dụng (đồng)",
+            min_value=0,
+            value=100_000_000,
+            step=10_000_000,
+        )
+        current_exposure = st.slider("Tỷ trọng cổ phiếu hiện tại", 0, 100, 0, format="%d%%")
+        risk_pct = st.slider("Rủi ro tối đa mỗi lệnh", 0.25, 3.0, 1.0, 0.25, format="%.2f%%")
+        max_position = st.slider("Tỷ trọng tối đa mỗi mã", 5, 40, 20, format="%d%%")
+    if st.button("Tính quy mô vị thế", type="primary", icon=":material/calculate:"):
+        try:
+            plan = calculate_position_size(
+                capital=float(capital),
+                cash_available=float(cash),
+                entry_price=float(entry),
+                stop_loss=float(stop),
+                risk_per_trade_pct=float(risk_pct),
+                max_position_pct=float(max_position),
+                current_stock_exposure_pct=float(current_exposure),
+                regime=regime,
+            )
+            st.session_state.position_size_plan = (symbol, plan)
+        except ValueError as error:
+            st.error(str(error))
+    stored = st.session_state.get("position_size_plan")
+    if not isinstance(stored, tuple) or len(stored) != 2 or stored[0] != symbol:
+        return
+    plan = stored[1]
+    with st.container(horizontal=True):
+        st.metric("Khối lượng", f"{plan.shares:,} cp", border=True)
+        st.metric("Số lô", f"{plan.lots}", border=True)
+        st.metric("Vốn cần", f"{plan.capital_required:,.0f} đ", border=True)
+        st.metric("Rủi ro nếu chạm stop", f"{plan.risk_amount:,.0f} đ", border=True)
+        st.metric("Tỷ trọng vị thế", f"{plan.position_weight_pct:.1f}%", border=True)
+    if plan.available:
+        st.success(
+            f"Quy mô tối đa đề xuất: {plan.shares:,} cổ phiếu. "
+            f"Yếu tố giới hạn: {plan.limiting_factor}."
+        )
+    else:
+        st.warning(
+            "Không đủ điều kiện mua tròn 1 lô 100 cổ phiếu. "
+            f"Yếu tố giới hạn: {plan.limiting_factor}."
+        )
+    with st.expander("Cách hệ thống tính"):
+        for reason in plan.reasons:
+            st.write(f"- {reason}")
+        st.caption(
+            "Đã cộng phí mua mặc định 0,15%; kết quả được làm tròn xuống "
+            "theo lô 100 cổ phiếu."
+        )
 
 
 def render_analysis() -> None:
@@ -2493,6 +2602,7 @@ workspace = st.segmented_control(
     [
         "Thị trường chung",
         "Cơ hội giao dịch",
+        "Quy mô vị thế",
         "Phân tích một mã",
         "Bộ sàng lọc",
         "Độ rộng thị trường",
@@ -2508,6 +2618,8 @@ if workspace == "Thị trường chung":
     render_market_dashboard()
 elif workspace == "Cơ hội giao dịch":
     render_opportunity_pipeline()
+elif workspace == "Quy mô vị thế":
+    render_position_sizing()
 elif workspace == "Phân tích một mã":
     render_analysis()
 elif workspace == "Bộ sàng lọc":
