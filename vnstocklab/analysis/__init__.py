@@ -51,6 +51,11 @@ from vnstocklab.analysis.market_breadth import (
     unavailable_breadth,
 )
 from vnstocklab.analysis.market_regime import MarketRegime, evaluate_market_regime
+from vnstocklab.analysis.opportunity_pipeline import (
+    PIPELINE_STAGES,
+    build_opportunity_pipeline,
+    open_position_symbols,
+)
 from vnstocklab.analysis.patterns import PricePattern, analyze_price_patterns
 from vnstocklab.analysis.portfolio import (
     PortfolioPosition,
@@ -94,6 +99,7 @@ __all__ = [
     "MarketBreadth",
     "MarketRegime",
     "Pivot",
+    "PIPELINE_STAGES",
     "PriceZone",
     "PortfolioTrade",
     "PortfolioPosition",
@@ -124,6 +130,7 @@ __all__ = [
     "build_scorecard",
     "build_replay_report",
     "build_portfolio",
+    "build_opportunity_pipeline",
     "build_risk_plan",
     "candlestick_events",
     "classify_pivots",
@@ -135,6 +142,7 @@ __all__ = [
     "evaluate_execution_gate",
     "evaluate_market_regime",
     "queue_replay_order",
+    "open_position_symbols",
     "screen_symbols",
     "suggest_rebalance",
     "unavailable_breadth",

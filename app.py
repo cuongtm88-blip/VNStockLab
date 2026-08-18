@@ -11,6 +11,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from vnstocklab.analysis import (
+    PIPELINE_STAGES,
     AlertRule,
     AnalysisResult,
     CandlestickEvent,
@@ -32,6 +33,7 @@ from vnstocklab.analysis import (
     analyze_multi_timeframe_ichimoku,
     analyze_price_patterns,
     analyze_support_resistance,
+    build_opportunity_pipeline,
     build_portfolio,
     build_replay_report,
     build_scorecard,
@@ -41,6 +43,7 @@ from vnstocklab.analysis import (
     evaluate_market_regime,
     execute_replay_order,
     filter_screening_rows,
+    open_position_symbols,
     queue_replay_order,
     replay_equity,
     run_backtest,
@@ -694,6 +697,98 @@ def render_market_dashboard() -> None:
         with st.expander(f"{len(screened.errors)} cảnh báo dữ liệu"):
             for error in screened.errors:
                 st.write(error)
+
+
+def render_opportunity_pipeline() -> None:
+    """Render actionable stock stages from the latest market scan and portfolio."""
+    st.subheader("Cơ hội giao dịch")
+    st.caption(
+        "Phân loại cơ hội theo bối cảnh thị trường, sức mạnh kỹ thuật và các vị thế "
+        "đang có trong Portfolio Manager."
+    )
+    snapshot = st.session_state.get("market_regime_snapshot")
+    if not isinstance(snapshot, tuple) or len(snapshot) != 3:
+        st.info(
+            "Chưa có dữ liệu. Hãy vào “Thị trường chung”, chạy “Đánh giá thị trường” "
+            "rồi quay lại màn hình này."
+        )
+        return
+    regime, _index_analysis, screened = snapshot
+    if not isinstance(regime, MarketRegime) or not isinstance(screened, ScreeningResult):
+        st.warning("Ảnh chụp thị trường không hợp lệ; vui lòng đánh giá lại.")
+        return
+    transactions = app_repository().list_portfolio_transactions()
+    held_symbols = open_position_symbols(transactions)
+    pipeline = build_opportunity_pipeline(screened.rows, regime, held_symbols)
+    if pipeline.empty:
+        st.info("Lượt quét chưa có mã đủ dữ liệu để xây pipeline.")
+        return
+
+    counts = pipeline["Giai đoạn"].value_counts()
+    with st.container(horizontal=True):
+        for stage in PIPELINE_STAGES:
+            st.metric(stage, int(counts.get(stage, 0)), border=True)
+    st.caption(
+        f"Chế độ thị trường: {regime.state} ({regime.score}/100) · "
+        f"Danh mục đang có: {', '.join(held_symbols) if held_symbols else 'Không có vị thế'}"
+    )
+    selected_stage = st.segmented_control(
+        "Giai đoạn",
+        ["Tất cả", *PIPELINE_STAGES],
+        default="Tất cả",
+        key="pipeline_stage_filter",
+    )
+    display = (
+        pipeline
+        if selected_stage == "Tất cả"
+        else pipeline[pipeline["Giai đoạn"] == selected_stage].reset_index(drop=True)
+    )
+    visible_columns = [
+        "Mã",
+        "Giai đoạn",
+        "Điểm",
+        "Tín hiệu",
+        "Xu hướng",
+        "Giá",
+        "Stop-loss",
+        "Mục tiêu",
+        "R/R",
+        "Hành động",
+        "Luận điểm pipeline",
+    ]
+    st.dataframe(
+        display[visible_columns],
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Điểm": st.column_config.ProgressColumn(min_value=0, max_value=100),
+            "Giá": st.column_config.NumberColumn(format="%.2f"),
+            "Stop-loss": st.column_config.NumberColumn(format="%.2f"),
+            "Mục tiêu": st.column_config.NumberColumn(format="%.2f"),
+            "R/R": st.column_config.NumberColumn(format="%.2f"),
+        },
+    )
+    actions = st.columns([1, 1, 3])
+    actionable = pipeline[pipeline["Giai đoạn"].isin(["Điểm mua", "Chuẩn bị mua"])]
+    if actions[0].button(
+        "Lưu mã hành động",
+        icon=":material/bookmark_add:",
+        disabled=actionable.empty,
+        key="save_pipeline_shortlist",
+    ):
+        st.session_state.screen_shortlist = tuple(actionable["Mã"].astype(str))
+        st.toast("Đã chuyển danh sách hành động sang Alert Center.")
+    actions[1].download_button(
+        "Tải pipeline CSV",
+        data=display[visible_columns].to_csv(index=False).encode("utf-8-sig"),
+        file_name="vnstocklab_opportunity_pipeline.csv",
+        mime="text/csv",
+        icon=":material/download:",
+        disabled=display.empty,
+    )
+    actions[2].caption(
+        "“Điểm mua” là điều kiện kỹ thuật cho phép xem xét vào lệnh, không phải lệnh mua tự động."
+    )
 
 
 def render_analysis() -> None:
@@ -2397,6 +2492,7 @@ workspace = st.segmented_control(
     "Không gian làm việc",
     [
         "Thị trường chung",
+        "Cơ hội giao dịch",
         "Phân tích một mã",
         "Bộ sàng lọc",
         "Độ rộng thị trường",
@@ -2410,6 +2506,8 @@ workspace = st.segmented_control(
 )
 if workspace == "Thị trường chung":
     render_market_dashboard()
+elif workspace == "Cơ hội giao dịch":
+    render_opportunity_pipeline()
 elif workspace == "Phân tích một mã":
     render_analysis()
 elif workspace == "Bộ sàng lọc":
